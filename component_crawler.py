@@ -36,15 +36,16 @@ class ComponentCrawler:
         
         # 헤드리스 모드 설정 (사용자 선택 반영)
         # Streamlit Cloud에서는 항상 headless 모드 필요
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--disable-software-rasterizer')
-        
-        if not self.headless:
-            # 로컬 환경에서만 headless 모드 해제 가능
-            chrome_options.remove_argument('--headless')
+        if self.headless:
+            chrome_options.add_argument('--headless')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--disable-software-rasterizer')
+        else:
+            # 로컬 환경에서 headless 모드 해제
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
         
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
