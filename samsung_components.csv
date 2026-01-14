@@ -1,0 +1,12 @@
+번호,URL,주요 컴포넌트 클래스,전체 클래스 목록
+1,https://www.samsung.com/uk/,progress cm-loader,"progress, cm-loader"
+2,https://www.samsung.com/uk/,srd19-gnb-search,srd19-gnb-search
+3,https://www.samsung.com/uk/,hd08-hero-kv-home,"hd08-hero-kv-home, bg-black, hd08-hero-kv-home--text-align-desktop-middle-left, hd08-hero-kv-home--text-align-mobile-bottom-center, hd08-hero-kv-home--text-white, hd08-hero-kv-home--text-shadow"
+4,https://www.samsung.com/uk/,co76-feature-kv,"co76-feature-kv, bg-white, co76-feature-kv--text-black, co76-feature-kv--text-align-desktop-middle-right, co76-feature-kv--text-align-mobile-middle-left, co76-feature-kv--display-horizontal"
+5,https://www.samsung.com/uk/,co73-feature-cards,"co73-feature-cards, bg-white, co73-feature-cards--column-4"
+6,https://www.samsung.com/uk/,co76-feature-kv,"co76-feature-kv, bg-white, co76-feature-kv--text-black, co76-feature-kv--text-align-desktop-middle-left, co76-feature-kv--text-align-mobile-middle-right, co76-feature-kv--display-horizontal"
+7,https://www.samsung.com/uk/,co73-feature-cards,"co73-feature-cards, bg-white, co73-feature-cards--column-4"
+8,https://www.samsung.com/uk/,co76-feature-kv,"co76-feature-kv, bg-white, co76-feature-kv--text-white, co76-feature-kv--text-align-desktop-middle-left, co76-feature-kv--text-align-mobile-middle-left, co76-feature-kv--display-horizontal"
+9,https://www.samsung.com/uk/,co73-feature-cards,"co73-feature-cards, bg-white, co73-feature-cards--column-4"
+10,https://www.samsung.com/uk/,co78-recommended-product-carousel,"co78-recommended-product-carousel, bg-white"
+11,https://www.samsung.com/uk/,co75-explore-carousel,"co75-explore-carousel, bg-white"
