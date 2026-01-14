@@ -77,49 +77,79 @@ class ComponentCrawler:
             # 실행 권한 부여 (배포 환경 대응)
             try:
                 os.chmod(driver_path, 0o755)
-            except:
-                pass  # 권한 설정 실패해도 계속 진행
+                print(f"   ✅ 실행 권한 부여 완료")
+            except Exception as chmod_error:
+                print(f"   ⚠️  실행 권한 부여 실패: {str(chmod_error)}")
+            
+            # ChromeDriver가 실제로 존재하는지 확인
+            if not os.path.exists(driver_path):
+                raise Exception(f"ChromeDriver 파일을 찾을 수 없습니다: {driver_path}")
+            
+            # 실행 가능한지 확인
+            if not os.access(driver_path, os.X_OK):
+                print(f"   ⚠️  실행 권한이 없습니다. 권한 부여 시도...")
+                os.chmod(driver_path, 0o755)
             
             service = Service(driver_path)
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             print(f"   ✅ Chrome 드라이버 설정 완료")
         except Exception as e:
-            print(f"   ⚠️  ChromeDriverManager 실패: {str(e)}")
-            # 대체 방법 1: 직접 경로 지정
-            try:
-                # 일반적인 ChromeDriver 경로들 시도
-                possible_driver_paths = [
-                    '/usr/local/bin/chromedriver',
-                    '/usr/bin/chromedriver',
-                    '/opt/chromedriver/chromedriver',
-                    os.path.expanduser('~/.wdm/drivers/chromedriver/linux64'),
-                ]
-                
-                driver_found = False
-                for path in possible_driver_paths:
-                    if os.path.exists(path):
-                        try:
-                            os.chmod(path, 0o755)
-                            service = Service(path)
-                            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                            print(f"   ✅ 대체 경로에서 Chrome 드라이버 발견: {path}")
-                            driver_found = True
-                            break
-                        except:
-                            continue
-                
-                if not driver_found:
-                    # 대체 방법 2: 시스템에 설치된 Chrome 사용
+            error_detail = str(e)
+            print(f"   ⚠️  ChromeDriverManager 실패: {error_detail}")
+            
+            # 대체 방법: 재귀적으로 ChromeDriver 찾기
+            import glob
+            possible_driver_paths = []
+            
+            # ChromeDriverManager 캐시 경로 찾기
+            cache_dirs = [
+                os.path.expanduser('~/.wdm/drivers/chromedriver'),
+                os.path.expanduser('~/.cache/selenium/chromedriver'),
+                '/tmp/chromedriver',
+            ]
+            
+            for cache_dir in cache_dirs:
+                if os.path.exists(cache_dir):
+                    # 모든 하위 디렉토리에서 chromedriver 찾기
+                    for root, dirs, files in os.walk(cache_dir):
+                        for file in files:
+                            if 'chromedriver' in file.lower() and not file.endswith('.zip'):
+                                full_path = os.path.join(root, file)
+                                possible_driver_paths.append(full_path)
+            
+            # 일반적인 경로들도 추가
+            possible_driver_paths.extend([
+                '/usr/local/bin/chromedriver',
+                '/usr/bin/chromedriver',
+                '/opt/chromedriver/chromedriver',
+            ])
+            
+            driver_found = False
+            for path in possible_driver_paths:
+                if os.path.exists(path):
+                    try:
+                        # 실행 권한 부여
+                        os.chmod(path, 0o755)
+                        service = Service(path)
+                        self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                        print(f"   ✅ 대체 경로에서 Chrome 드라이버 발견: {path}")
+                        driver_found = True
+                        break
+                    except Exception as path_error:
+                        print(f"   ⚠️  경로 시도 실패 ({path}): {str(path_error)}")
+                        continue
+            
+            if not driver_found:
+                # 마지막 시도: 옵션 없이 시도
+                try:
                     self.driver = webdriver.Chrome(options=chrome_options)
                     print(f"   ✅ 시스템 Chrome 드라이버 사용")
-            except Exception as e2:
-                error_msg = f"Chrome 드라이버 설정 실패: {str(e2)}"
-                print(f"   ❌ {error_msg}")
-                print(f"   💡 해결 방법:")
-                print(f"      1. Chrome 브라우저가 설치되어 있는지 확인")
-                print(f"      2. ChromeDriver가 PATH에 있는지 확인")
-                print(f"      3. 배포 환경에서는 Chrome 설치가 필요할 수 있습니다")
-                raise Exception(error_msg)
+                except Exception as e2:
+                    error_msg = f"Chrome 드라이버 설정 실패: {str(e2)}"
+                    print(f"   ❌ {error_msg}")
+                    print(f"   💡 배포 환경에서는 Docker 기반 플랫폼(Railway, Render) 사용을 권장합니다")
+                    print(f"   💡 또는 Streamlit Cloud 대신 Railway/Render 사용을 고려해주세요")
+                    raise Exception(error_msg)
         
         self.driver.implicitly_wait(10)
         self.driver.set_page_load_timeout(30)
