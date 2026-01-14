@@ -35,12 +35,16 @@ class ComponentCrawler:
         chrome_options = Options()
         
         # 헤드리스 모드 설정 (사용자 선택 반영)
-        if self.headless:
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--disable-software-rasterizer')
+        # Streamlit Cloud에서는 항상 headless 모드 필요
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--disable-software-rasterizer')
+        
+        if not self.headless:
+            # 로컬 환경에서만 headless 모드 해제 가능
+            chrome_options.remove_argument('--headless')
         
         chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
@@ -48,11 +52,12 @@ class ComponentCrawler:
         chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         
         # Chrome 바이너리 경로 설정 (클라우드 환경 대응)
+        # Streamlit Cloud에서는 chromium 사용
         possible_chrome_paths = [
+            '/usr/bin/chromium',  # Streamlit Cloud 우선
+            '/usr/bin/chromium-browser',
             '/usr/bin/google-chrome',
             '/usr/bin/google-chrome-stable',
-            '/usr/bin/chromium-browser',
-            '/usr/bin/chromium',
             '/snap/bin/chromium',
             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
         ]
