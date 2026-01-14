@@ -5,6 +5,7 @@
 """
 
 import re
+import os
 from datetime import datetime
 from urllib.parse import urlparse
 import pandas as pd
@@ -33,17 +34,58 @@ class ComponentCrawler:
         """Chrome 드라이버 설정"""
         chrome_options = Options()
         
+        # 헤드리스 모드 설정 (사용자 선택 반영)
         if self.headless:
             chrome_options.add_argument('--headless')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--disable-software-rasterizer')
         
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-extensions')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        chrome_options.add_argument('--window-size=1920,1080')
         chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         
-        service = Service(ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Chrome 바이너리 경로 설정 (클라우드 환경 대응)
+        possible_chrome_paths = [
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/chromium-browser',
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+        ]
+        
+        chrome_path = None
+        for path in possible_chrome_paths:
+            if os.path.exists(path):
+                chrome_path = path
+                break
+        
+        if chrome_path:
+            chrome_options.binary_location = chrome_path
+        
+        try:
+            # ChromeDriverManager로 드라이버 설치 시도
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            print(f"   ✅ Chrome 드라이버 설정 완료")
+        except Exception as e:
+            print(f"   ⚠️  ChromeDriverManager 실패: {str(e)}")
+            # 대체 방법: 시스템에 설치된 Chrome 사용
+            try:
+                self.driver = webdriver.Chrome(options=chrome_options)
+                print(f"   ✅ 시스템 Chrome 드라이버 사용")
+            except Exception as e2:
+                error_msg = f"Chrome 드라이버 설정 실패: {str(e2)}"
+                print(f"   ❌ {error_msg}")
+                print(f"   💡 해결 방법:")
+                print(f"      1. Chrome 브라우저가 설치되어 있는지 확인")
+                print(f"      2. ChromeDriver가 PATH에 있는지 확인")
+                print(f"      3. 배포 환경에서는 Chrome 설치가 필요할 수 있습니다")
+                raise Exception(error_msg)
+        
         self.driver.implicitly_wait(10)
+        self.driver.set_page_load_timeout(30)
         
     def extract_component_name(self, class_string):
         """
@@ -62,10 +104,11 @@ class ComponentCrawler:
         classes = class_string.split()
         
         # AA##- 또는 AAA##- 패턴을 따르는 컴포넌트만 찾기
-        # 예: hd08-, co76-, srd19- 등
+        # 예: hd08-, co76-, srd19-, nv19-, pd21- 등
         component_pattern = re.compile(r'^[a-z]{2,3}\d{2}-')
         
         for cls in classes:
+            # 패턴 매칭 확인
             if component_pattern.match(cls):
                 return cls
         
@@ -139,8 +182,9 @@ class ComponentCrawler:
             """)
             
             if page_track:
-                # Camel 형태로 변환 (첫 글자만 대문자)
-                return page_track.capitalize()
+                # Camel 형태로 변환 (각 단어의 첫 글자 대문자)
+                # 예: "product category detail" -> "Product Category Detail"
+                return page_track.title()
             
             return "Unknown"
             
@@ -163,16 +207,33 @@ class ComponentCrawler:
                 self.setup_driver()
             
             # 페이지 로드
+            print(f"   📄 페이지 로딩 중...")
             self.driver.get(url)
             
             # 페이지 로딩 대기
-            WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.TAG_NAME, "div"))
-            )
+            print(f"   ⏳ 요소 대기 중...")
+            try:
+                WebDriverWait(self.driver, 20).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "div"))
+                )
+                print(f"   ✅ div 요소 발견")
+            except Exception as e:
+                print(f"   ⚠️  div 요소 대기 타임아웃: {str(e)}")
+                # 계속 진행
+            
+            # JavaScript 실행 완료 대기
+            import time
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    lambda driver: driver.execute_script("return document.readyState") == "complete"
+                )
+                print(f"   ✅ 페이지 로딩 완료")
+            except:
+                print(f"   ⚠️  페이지 로딩 완료 대기 타임아웃 (계속 진행)")
             
             # 추가 로딩 시간 (동적 콘텐츠)
-            import time
-            time.sleep(3)
+            print(f"   ⏳ 동적 콘텐츠 로딩 대기 중...")
+            time.sleep(5)  # 3초 → 5초로 증가
             
             # Site Code 추출
             site_code = self.extract_site_code(url)
@@ -187,50 +248,70 @@ class ComponentCrawler:
             
             print(f"✅ 총 {len(divs)}개의 div 요소 발견")
             
+            if len(divs) == 0:
+                print("   ⚠️  div 요소를 찾을 수 없습니다. 페이지가 제대로 로드되었는지 확인하세요.")
+                return []
+            
             # 컴포넌트별로 데이터를 수집하기 위한 딕셔너리
             components_data = {}
             processed_classes = set()  # 중복 제거를 위한 세트 (클래스명 기준)
+            matched_count = 0  # 패턴에 맞는 클래스 개수
             
             for idx, div in enumerate(divs, 1):
-                class_attr = div.get_attribute("class")
-                
-                if class_attr and class_attr.strip():
-                    component_class = self.extract_component_name(class_attr)
+                try:
+                    class_attr = div.get_attribute("class")
                     
-                    # 컴포넌트 패턴에 맞는 것만 추출
-                    if component_class:
-                        # 중복 체크 (클래스명 기준)
-                        if component_class in processed_classes:
-                            continue
+                    if class_attr and class_attr.strip():
+                        component_class = self.extract_component_name(class_attr)
                         
-                        processed_classes.add(component_class)
-                        
-                        # display 스타일 체크
-                        display_style = div.value_of_css_property("display")
-                        is_displayed = display_style != "none"
-                        
-                        # BEM 컴포넌트명 추출
-                        component_name = self.extract_bem_component(component_class)
-                        
-                        # 컴포넌트별로 데이터 그룹화
-                        if component_name not in components_data:
-                            components_data[component_name] = {
-                                'classes': [],
-                                'display_y': 0,
-                                'display_n': 0,
-                                'all_classes': set()
-                            }
-                        
-                        components_data[component_name]['classes'].append(component_class)
-                        
-                        if is_displayed:
-                            components_data[component_name]['display_y'] += 1
-                        else:
-                            components_data[component_name]['display_n'] += 1
-                        
-                        # 전체 클래스 목록 수집
-                        for cls in class_attr.split():
-                            components_data[component_name]['all_classes'].add(cls)
+                        # 컴포넌트 패턴에 맞는 것만 추출
+                        if component_class:
+                            matched_count += 1
+                            # 중복 체크 (클래스명 기준)
+                            if component_class in processed_classes:
+                                continue
+                            
+                            processed_classes.add(component_class)
+                            
+                            # display 스타일 체크
+                            try:
+                                display_style = div.value_of_css_property("display")
+                                is_displayed = display_style != "none"
+                            except:
+                                is_displayed = True  # 기본값
+                            
+                            # BEM 컴포넌트명 추출
+                            component_name = self.extract_bem_component(component_class)
+                            
+                            # 컴포넌트별로 데이터 그룹화
+                            if component_name not in components_data:
+                                components_data[component_name] = {
+                                    'classes': [],
+                                    'display_y': 0,
+                                    'display_n': 0,
+                                    'all_classes': set()
+                                }
+                            
+                            components_data[component_name]['classes'].append(component_class)
+                            
+                            if is_displayed:
+                                components_data[component_name]['display_y'] += 1
+                            else:
+                                components_data[component_name]['display_n'] += 1
+                            
+                            # 전체 클래스 목록 수집
+                            for cls in class_attr.split():
+                                components_data[component_name]['all_classes'].add(cls)
+                except Exception as e:
+                    # 개별 div 처리 중 에러는 무시하고 계속 진행
+                    continue
+            
+            print(f"   └ 패턴에 맞는 클래스: {matched_count}개")
+            
+            if len(components_data) == 0:
+                print("   ⚠️  컴포넌트 패턴(AA##- 또는 AAA##-)에 맞는 클래스를 찾을 수 없습니다.")
+                print("   └ 예시 패턴: hd08-, co76-, nv16-, srd19- 등")
+                return []
             
             # 결과 리스트 생성 (코드 내 순서대로)
             results = []
@@ -253,10 +334,32 @@ class ComponentCrawler:
             print(f"   └ 총 클래스 수: {total_classes}개")
             print(f"   └ Display Y: {total_y}개")
             print(f"   └ Display N: {total_n}개")
+            
+            if len(results) == 0:
+                print(f"   ⚠️  패턴에 맞는 클래스를 찾을 수 없습니다!")
+                print(f"   💡 찾는 패턴: AA##- 또는 AAA##- (예: co77-, nv19-, pd21-, hd08-)")
+                # 디버깅: 샘플 클래스 출력
+                sample_classes = []
+                for div in divs[:50]:
+                    try:
+                        class_attr = div.get_attribute("class")
+                        if class_attr and class_attr.strip():
+                            sample_classes.append(class_attr[:80])
+                    except:
+                        continue
+                if sample_classes:
+                    print(f"   🔍 샘플 클래스 (처음 10개):")
+                    for i, cls in enumerate(sample_classes[:10], 1):
+                        print(f"      {i}. {cls}")
+            
             return results
             
         except Exception as e:
-            print(f"❌ 에러 발생: {str(e)}")
+            import traceback
+            error_msg = str(e)
+            print(f"❌ 에러 발생: {error_msg}")
+            print(f"   상세 정보:")
+            traceback.print_exc()
             return []
     
     def save_to_excel(self, data, url):

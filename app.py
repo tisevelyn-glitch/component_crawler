@@ -301,20 +301,39 @@ if crawl_button:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                status_text.text("🌐 페이지 로딩 중...")
-                progress_bar.progress(25)
+                status_text.text("🌐 Chrome 드라이버 설정 중...")
+                progress_bar.progress(10)
                 
-                # 크롤링 실행
-                results = crawler.crawl_divs(url)
-                
-                status_text.text("📊 데이터 추출 중...")
-                progress_bar.progress(75)
-                
-                # 크롤러 종료
-                crawler.close()
-                
-                status_text.text("✅ 완료!")
-                progress_bar.progress(100)
+                # 드라이버 설정 (명시적으로 호출)
+                try:
+                    crawler.setup_driver()
+                    status_text.text("🌐 페이지 로딩 중...")
+                    progress_bar.progress(30)
+                except Exception as driver_error:
+                    st.error(f"❌ Chrome 드라이버 설정 실패: {str(driver_error)}")
+                    st.info("""
+                    **해결 방법:**
+                    - 로컬 환경: Chrome 브라우저가 설치되어 있는지 확인하세요
+                    - 배포 환경: Chrome 설치가 필요할 수 있습니다 (Railway, Render 등)
+                    """)
+                    crawler = None
+                    results = []
+                else:
+                    # 크롤링 실행
+                    status_text.text("🔍 크롤링 중...")
+                    progress_bar.progress(50)
+                    
+                    results = crawler.crawl_divs(url)
+                    
+                    status_text.text("📊 데이터 처리 중...")
+                    progress_bar.progress(85)
+                    
+                    # 크롤러 종료
+                    if crawler:
+                        crawler.close()
+                    
+                    status_text.text("✅ 완료!")
+                    progress_bar.progress(100)
                 
                 # 결과 저장
                 if results:
@@ -323,10 +342,38 @@ if crawl_button:
                     st.success(f"✅ 크롤링 완료! 총 {len(results)}개의 컴포넌트를 발견했습니다.")
                 else:
                     st.warning("⚠️ 컴포넌트 패턴에 맞는 결과를 찾지 못했습니다.")
+                    st.info("""
+                    **가능한 원인:**
+                    - 해당 웹사이트가 컴포넌트 패턴(AA##- 또는 AAA##-)을 사용하지 않습니다
+                    - 페이지가 완전히 로드되지 않았습니다
+                    - JavaScript로 동적 렌더링되는 요소가 아직 로드되지 않았습니다
+                    
+                    **예시 패턴:** `hd08-hero-kv-home`, `co76-feature-kv`, `nv16-country-selector`
+                    """)
                     st.session_state.results = None
                 
             except Exception as e:
-                st.error(f"❌ 오류 발생: {str(e)}")
+                import traceback
+                error_msg = str(e)
+                st.error(f"❌ 오류 발생: {error_msg}")
+                
+                # 크롤러가 있으면 종료
+                if 'crawler' in locals() and crawler:
+                    try:
+                        crawler.close()
+                    except:
+                        pass
+                
+                with st.expander("🔍 상세 에러 정보"):
+                    st.code(traceback.format_exc())
+                
+                st.info("""
+                **일반적인 문제 해결:**
+                1. Chrome 브라우저가 설치되어 있는지 확인
+                2. 인터넷 연결 확인
+                3. URL이 올바른지 확인
+                4. 배포 환경에서는 Chrome 설치가 필요할 수 있습니다
+                """)
                 st.session_state.results = None
             
             finally:
@@ -458,9 +505,11 @@ if st.session_state.results is not None:
     else:
         filtered_df = df
     
-    # 데이터프레임 표시
+    # 데이터프레임 표시 (중복 컬럼 제거)
+    display_df = filtered_df.drop(['Site Code', 'Page Type', 'URL'], axis=1, errors='ignore')
+    
     st.dataframe(
-        filtered_df,
+        display_df,
         hide_index=True,
         use_container_width=True,
         height=400,
@@ -482,7 +531,7 @@ if st.session_state.results is not None:
     col1, col2 = st.columns(2)
     
     with col1:
-        # 엑셀 다운로드
+        # 엑셀 다운로드 (전체 데이터 포함)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             filtered_df.to_excel(writer, index=False, sheet_name='Components')
@@ -500,7 +549,7 @@ if st.session_state.results is not None:
         )
     
     with col2:
-        # CSV 다운로드
+        # CSV 다운로드 (전체 데이터 포함)
         csv = filtered_df.to_csv(index=False, encoding='utf-8-sig')
         csv_filename = filename.replace('.xlsx', '.csv')
         
